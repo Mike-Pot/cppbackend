@@ -1,187 +1,136 @@
-/*
+
+#ifdef WIN32
 #include <sdkddkver.h>
-#define BOOST_DISABLE_CURRENT_LOCATI
-#include <boost/asio.hpp>
+#endif
+// boost.beast будет использовать std::string_view вместо boost::string_view
+#define BOOST_BEAST_USE_STD_STRING_VIEW
 
+#include <boost/asio/ip/tcp.hpp>
+#include <boost/beast/core.hpp>
+#include <boost/beast/http.hpp>
 #include <iostream>
-#include <string>
-#include <string_view>
-
-
+#include <thread>
+#include <optional>
 
 namespace net = boost::asio;
-using net::ip::tcp;
-
+using tcp = net::ip::tcp;
 using namespace std::literals;
+namespace beast = boost::beast;
+namespace http = beast::http;
+// Запрос, тело которого представлено в виде строки
+using StringRequest = http::request<http::string_body>;
+// Ответ, тело которого представлено в виде строки
+using StringResponse = http::response<http::string_body>;
 
-int serv() {
-    static const int port = 3333;
+std::optional<StringRequest> ReadRequest(tcp::socket& socket, beast::flat_buffer& buffer) {
+    beast::error_code ec;
+    StringRequest req;
+    // Считываем из socket запрос req, используя buffer для хранения данных.
+    // В ec функция запишет код ошибки.
+    http::read(socket, buffer, req, ec);
 
-    net::io_context io_context;
-
-    // используем конструктор tcp::v4 по умолчанию для адреса 0.0.0.0
-    tcp::acceptor acceptor(io_context, tcp::endpoint(net::ip::make_address("127.0.0.1"), port));
-    std::cout << "Waiting for connection..."sv << std::endl;
-    
-
-    boost::system::error_code ec;
-    tcp::socket socket{io_context};
-    acceptor.accept(socket, ec);
-
-    if (ec) {
-        std::cout << "Can't accept connection"sv << std::endl;
-        return 1;
+    if (ec == http::error::end_of_stream) {
+        return std::nullopt;
     }
-
-    // Работаем с socket   
-
-    net::streambuf stream_buf;
-    net::read_until(socket, stream_buf, '\n', ec);
-    std::string client_data{std::istreambuf_iterator<char>(&stream_buf),
-        std::istreambuf_iterator<char>()};
-
     if (ec) {
-        std::cout << "Error reading data"sv << std::endl;
-        return 1;
+        throw std::runtime_error("Failed to read request: "s.append(ec.message()));
     }
-
-    std::cout << "Client said: "sv << client_data << std::endl;
-
-    socket.write_some(net::buffer("Hello, I'm server!\n"sv), ec);
-
-    if (ec) {
-        std::cout << "Error sending data"sv << std::endl;
-        return 1;
+    return req;
+}
+void DumpRequest(const StringRequest& req) {
+    std::cout << req.method_string() << ' ' << req.target() << std::endl;
+    // Выводим заголовки запроса
+    for (const auto& header : req) {
+        std::cout << "  "sv << header.name_string() << ": "sv << header.value() << std::endl;
     }
 }
 
-int clnt(const char* ip) {
-    static const int port = 3333;
+// Структура ContentType задаёт область видимости для констант,
+// задающий значения HTTP-заголовка Content-Type
+struct ContentType {
+    ContentType() = delete;
+    constexpr static std::string_view TEXT_HTML = "text/html"sv;
+    // При необходимости внутрь ContentType можно добавить и другие типы контента
+};
 
-    std::cout << "Client started" << std::endl;
-    // Создадим endpoint - объект с информацией об адресе и порте.
-    // Для разбора IP-адреса пользуемся функцией net::ip::make_address.
-    boost::system::error_code ec;
-    auto endpoint = tcp::endpoint(net::ip::make_address(ip, ec), port);
-
-    if (ec) {
-        std::cout << "Wrong IP format"sv << std::endl;
-        return 1;
-    }
-
-    // int main(...)
-    net::io_context io_context;
-    tcp::socket socket{io_context};
-    socket.connect(endpoint, ec);
-
-    if (ec) {
-        std::cout << "Can't connect to server"sv << std::endl;
-        return 1;
-    }
-   
-
-// Отправляем данные и проверяем, что нет ошибки.
-    socket.write_some(net::buffer("Hello, I'm client!\n"sv), ec);
-    if (ec) {
-        std::cout << "Error sending data"sv << std::endl;
-        return 1;
-    }
-
-    net::streambuf stream_buf;
-    net::read_until(socket, stream_buf, '\n', ec);
-    std::string server_data{std::istreambuf_iterator<char>(&stream_buf),
-        std::istreambuf_iterator<char>()};
-
-    if (ec) {
-        std::cout << "Error reading data"sv << std::endl;
-        return 1;
-    }
-
-    std::cout << "Server responded: "sv << server_data << std::endl;
+// Создаёт StringResponse с заданными параметрами
+StringResponse MakeStringResponse(http::status status, std::string_view body, unsigned http_version,
+    bool keep_alive,
+    std::string_view content_type = ContentType::TEXT_HTML) {
+    StringResponse response(status, http_version);
+    response.set(http::field::content_type, content_type);
+    response.body() = body;
+    response.content_length(body.size());
+    response.keep_alive(keep_alive);
+    return response;
 }
 
-using net::ip::udp;
-void servUDP()
-{
-    static const int port = 3333;
-    static const size_t max_buffer_size = 1024;
+StringResponse HandleRequest(StringRequest&& req) {
+    const auto text_response = [&req](http::status status, std::string_view text) {
+        return MakeStringResponse(status, text, req.version(), req.keep_alive());
+    };
+    auto method = req.method();
+    //StringResponse res;
+    if (method == http::verb::get)
+    {
+        std::string ans = req.target().substr(1);
+        ans = "Hello, " + ans;
+        return text_response(http::status::ok, ans);
+    }
+    if (method == http::verb::head)
+    {
+        return text_response(http::status::ok, "");
+    }
+    // Здесь можно обработать запрос и сформировать ответ, но пока всегда отвечаем: Hello
+    StringResponse res = text_response(http::status::method_not_allowed, "Invalid method"sv);
+    res.set(http::field::allow, "GET, HEAD");
+    return res;
+}
 
+
+void HandleConnection(tcp::socket& socket) {
     try {
-        boost::asio::io_context io_context;
+        // Буфер для чтения данных в рамках текущей сессии.
+        beast::flat_buffer buffer;
 
-        udp::socket socket(io_context, udp::endpoint(net::ip::make_address("127.0.0.1"), port));
-
-        // Запускаем сервер в цикле, чтобы можно было работать со многими клиентами
-        for (;;) {
-            // Создаём буфер достаточного размера, чтобы вместить датаграмму.
-            std::array<char, max_buffer_size> recv_buf;
-            udp::endpoint remote_endpoint;
-
-            // Получаем не только данные, но и endpoint клиента
-            auto size = socket.receive_from(boost::asio::buffer(recv_buf), remote_endpoint);
-
-            std::cout << "Client said "sv << std::string_view(recv_buf.data(), size) << std::endl;
-
-            // Отправляем ответ на полученный endpoint, игнорируя ошибку.
-            // На этот раз не отправляем перевод строки: размер датаграммы будет получен автоматически.
-            boost::system::error_code ignored_error;
-            socket.send_to(boost::asio::buffer("Hello from UDP-server"sv), remote_endpoint, 0, ignored_error);
+        // Продолжаем обработку запросов, пока клиент их отправляет
+        while (auto request = ReadRequest(socket, buffer)) {
+            DumpRequest(*request);
+            StringResponse response = HandleRequest(*std::move(request));
+            http::write(socket, response);
+            if (response.need_eof()) {
+                break;
+            }
         }
     }
-    catch (std::exception& e) {
-        std::cerr << e.what() << std::endl;
-
-    }
-}
-
-void clientUDP(const char* ip)
-{
-    static const int port = 3333;
-    static const size_t max_buffer_size = 1024;
-   
-
-    try {
-        net::io_context io_context;
-
-        // Перед отправкой данных нужно открыть сокет. 
-        // При открытии указываем протокол (IPv4 или IPv6) вместо endpoint.
-        udp::socket socket(io_context, udp::v4());
-
-        boost::system::error_code ec;
-        auto endpoint = udp::endpoint(net::ip::make_address(ip, ec), port);
-        socket.send_to(net::buffer("Hello from UDP-client"sv), endpoint);
-
-        // Получаем данные и endpoint.
-        std::array<char, max_buffer_size> recv_buf;
-        udp::endpoint sender_endpoint;
-        size_t size = socket.receive_from(net::buffer(recv_buf), sender_endpoint);
-
-        std::cout << "Server responded "sv << std::string_view(recv_buf.data(), size) << std::endl;
-    }
-    catch (std::exception& e) {
+    catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
     }
+    beast::error_code ec;
+    // Запрещаем дальнейшую отправку данных через сокет
+    socket.shutdown(tcp::socket::shutdown_send, ec);
 }
-*/
-/*
-int main(int argc, char** argv)
-{
-    std::cout << "Hello" << std::endl;
-    if(argv[1][0] == 'c')
-    {
-        clnt("127.0.0.1");
-    }     
-    if (argv[1][0] == 's')
-    {
-        serv();
-    }
-    if (argv[1][0] == 'd')
-    {
-        clientUDP("127.0.0.1");
-    }
-    if (argv[1][0] == 't')
-    {
-        servUDP();
+int main() {
+    net::io_context ioc;
+
+    const auto address = net::ip::make_address("0.0.0.0");
+    constexpr unsigned short port = 8080;
+
+    tcp::acceptor acceptor(ioc, { address, port });
+    std::cout << "Server has started..."sv << std::endl;
+    while (true) {
+        tcp::socket socket(ioc);
+        acceptor.accept(socket);
+
+        // Запускаем обработку взаимодействия с клиентом в отдельном потоке
+        std::thread t(
+            // Лямбда-функция будет выполняться в отдельном потоке
+            [](tcp::socket socket) {
+                HandleConnection(socket);
+            },
+            std::move(socket));  // Сокет нельзя скопировать, но можно переместить
+
+        // После вызова detach поток продолжит выполняться независимо от объекта t
+        t.detach();
     }
 }
-*/
