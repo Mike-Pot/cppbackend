@@ -2,7 +2,7 @@
 #ifdef WIN32
 #include <sdkddkver.h>
 #endif
-// boost.beast будет использовать std::string_view вместо boost::string_view
+// boost.beast ГЎГіГ¤ГҐГІ ГЁГ±ГЇГ®Г«ГјГ§Г®ГўГ ГІГј std::string_view ГўГ¬ГҐГ±ГІГ® boost::string_view
 #define BOOST_BEAST_USE_STD_STRING_VIEW
 
 #include <boost/asio/ip/tcp.hpp>
@@ -17,16 +17,16 @@ using tcp = net::ip::tcp;
 using namespace std::literals;
 namespace beast = boost::beast;
 namespace http = beast::http;
-// Запрос, тело которого представлено в виде строки
+// Г‡Г ГЇГ°Г®Г±, ГІГҐГ«Г® ГЄГ®ГІГ®Г°Г®ГЈГ® ГЇГ°ГҐГ¤Г±ГІГ ГўГ«ГҐГ­Г® Гў ГўГЁГ¤ГҐ Г±ГІГ°Г®ГЄГЁ
 using StringRequest = http::request<http::string_body>;
-// Ответ, тело которого представлено в виде строки
+// ГЋГІГўГҐГІ, ГІГҐГ«Г® ГЄГ®ГІГ®Г°Г®ГЈГ® ГЇГ°ГҐГ¤Г±ГІГ ГўГ«ГҐГ­Г® Гў ГўГЁГ¤ГҐ Г±ГІГ°Г®ГЄГЁ
 using StringResponse = http::response<http::string_body>;
 
 std::optional<StringRequest> ReadRequest(tcp::socket& socket, beast::flat_buffer& buffer) {
     beast::error_code ec;
     StringRequest req;
-    // Считываем из socket запрос req, используя buffer для хранения данных.
-    // В ec функция запишет код ошибки.
+    // Г‘Г·ГЁГІГ»ГўГ ГҐГ¬ ГЁГ§ socket Г§Г ГЇГ°Г®Г± req, ГЁГ±ГЇГ®Г«ГјГ§ГіГї buffer Г¤Г«Гї ГµГ°Г Г­ГҐГ­ГЁГї Г¤Г Г­Г­Г»Гµ.
+    // Г‚ ec ГґГіГ­ГЄГ¶ГЁГї Г§Г ГЇГЁГёГҐГІ ГЄГ®Г¤ Г®ГёГЁГЎГЄГЁ.
     http::read(socket, buffer, req, ec);
 
     if (ec == http::error::end_of_stream) {
@@ -39,21 +39,21 @@ std::optional<StringRequest> ReadRequest(tcp::socket& socket, beast::flat_buffer
 }
 void DumpRequest(const StringRequest& req) {
     std::cout << req.method_string() << ' ' << req.target() << std::endl;
-    // Выводим заголовки запроса
+    // Г‚Г»ГўГ®Г¤ГЁГ¬ Г§Г ГЈГ®Г«Г®ГўГЄГЁ Г§Г ГЇГ°Г®Г±Г 
     for (const auto& header : req) {
         std::cout << "  "sv << header.name_string() << ": "sv << header.value() << std::endl;
     }
 }
 
-// Структура ContentType задаёт область видимости для констант,
-// задающий значения HTTP-заголовка Content-Type
+// Г‘ГІГ°ГіГЄГІГіГ°Г  ContentType Г§Г Г¤Г ВёГІ Г®ГЎГ«Г Г±ГІГј ГўГЁГ¤ГЁГ¬Г®Г±ГІГЁ Г¤Г«Гї ГЄГ®Г­Г±ГІГ Г­ГІ,
+// Г§Г Г¤Г ГѕГ№ГЁГ© Г§Г­Г Г·ГҐГ­ГЁГї HTTP-Г§Г ГЈГ®Г«Г®ГўГЄГ  Content-Type
 struct ContentType {
     ContentType() = delete;
     constexpr static std::string_view TEXT_HTML = "text/html"sv;
-    // При необходимости внутрь ContentType можно добавить и другие типы контента
+    // ГЏГ°ГЁ Г­ГҐГ®ГЎГµГ®Г¤ГЁГ¬Г®Г±ГІГЁ ГўГ­ГіГІГ°Гј ContentType Г¬Г®Г¦Г­Г® Г¤Г®ГЎГ ГўГЁГІГј ГЁ Г¤Г°ГіГЈГЁГҐ ГІГЁГЇГ» ГЄГ®Г­ГІГҐГ­ГІГ 
 };
 
-// Создаёт StringResponse с заданными параметрами
+// Г‘Г®Г§Г¤Г ВёГІ StringResponse Г± Г§Г Г¤Г Г­Г­Г»Г¬ГЁ ГЇГ Г°Г Г¬ГҐГІГ°Г Г¬ГЁ
 StringResponse MakeStringResponse(http::status status, std::string_view body, unsigned http_version,
     bool keep_alive,
     std::string_view content_type = ContentType::TEXT_HTML) {
@@ -73,7 +73,7 @@ StringResponse HandleRequest(StringRequest&& req) {
     //StringResponse res;
     if (method == http::verb::get)
     {
-        std::string ans = req.target().substr(1);
+         std::string ans = std::string(req.target().substr(1));
         ans = "Hello, " + ans;
         return text_response(http::status::ok, ans);
     }
@@ -81,7 +81,7 @@ StringResponse HandleRequest(StringRequest&& req) {
     {
         return text_response(http::status::ok, "");
     }
-    // Здесь можно обработать запрос и сформировать ответ, но пока всегда отвечаем: Hello
+    // Г‡Г¤ГҐГ±Гј Г¬Г®Г¦Г­Г® Г®ГЎГ°Г ГЎГ®ГІГ ГІГј Г§Г ГЇГ°Г®Г± ГЁ Г±ГґГ®Г°Г¬ГЁГ°Г®ГўГ ГІГј Г®ГІГўГҐГІ, Г­Г® ГЇГ®ГЄГ  ГўГ±ГҐГЈГ¤Г  Г®ГІГўГҐГ·Г ГҐГ¬: Hello
     StringResponse res = text_response(http::status::method_not_allowed, "Invalid method"sv);
     res.set(http::field::allow, "GET, HEAD");
     return res;
@@ -90,10 +90,10 @@ StringResponse HandleRequest(StringRequest&& req) {
 
 void HandleConnection(tcp::socket& socket) {
     try {
-        // Буфер для чтения данных в рамках текущей сессии.
+        // ГЃГіГґГҐГ° Г¤Г«Гї Г·ГІГҐГ­ГЁГї Г¤Г Г­Г­Г»Гµ Гў Г°Г Г¬ГЄГ Гµ ГІГҐГЄГіГ№ГҐГ© Г±ГҐГ±Г±ГЁГЁ.
         beast::flat_buffer buffer;
 
-        // Продолжаем обработку запросов, пока клиент их отправляет
+        // ГЏГ°Г®Г¤Г®Г«Г¦Г ГҐГ¬ Г®ГЎГ°Г ГЎГ®ГІГЄГі Г§Г ГЇГ°Г®Г±Г®Гў, ГЇГ®ГЄГ  ГЄГ«ГЁГҐГ­ГІ ГЁГµ Г®ГІГЇГ°Г ГўГ«ГїГҐГІ
         while (auto request = ReadRequest(socket, buffer)) {
             DumpRequest(*request);
             StringResponse response = HandleRequest(*std::move(request));
@@ -107,7 +107,7 @@ void HandleConnection(tcp::socket& socket) {
         std::cerr << e.what() << std::endl;
     }
     beast::error_code ec;
-    // Запрещаем дальнейшую отправку данных через сокет
+    // Г‡Г ГЇГ°ГҐГ№Г ГҐГ¬ Г¤Г Г«ГјГ­ГҐГ©ГёГіГѕ Г®ГІГЇГ°Г ГўГЄГі Г¤Г Г­Г­Г»Гµ Г·ГҐГ°ГҐГ§ Г±Г®ГЄГҐГІ
     socket.shutdown(tcp::socket::shutdown_send, ec);
 }
 int main() {
@@ -122,15 +122,15 @@ int main() {
         tcp::socket socket(ioc);
         acceptor.accept(socket);
 
-        // Запускаем обработку взаимодействия с клиентом в отдельном потоке
+        // Г‡Г ГЇГіГ±ГЄГ ГҐГ¬ Г®ГЎГ°Г ГЎГ®ГІГЄГі ГўГ§Г ГЁГ¬Г®Г¤ГҐГ©Г±ГІГўГЁГї Г± ГЄГ«ГЁГҐГ­ГІГ®Г¬ Гў Г®ГІГ¤ГҐГ«ГјГ­Г®Г¬ ГЇГ®ГІГ®ГЄГҐ
         std::thread t(
-            // Лямбда-функция будет выполняться в отдельном потоке
+            // Г‹ГїГ¬ГЎГ¤Г -ГґГіГ­ГЄГ¶ГЁГї ГЎГіГ¤ГҐГІ ГўГ»ГЇГ®Г«Г­ГїГІГјГ±Гї Гў Г®ГІГ¤ГҐГ«ГјГ­Г®Г¬ ГЇГ®ГІГ®ГЄГҐ
             [](tcp::socket socket) {
                 HandleConnection(socket);
             },
-            std::move(socket));  // Сокет нельзя скопировать, но можно переместить
+            std::move(socket));  // Г‘Г®ГЄГҐГІ Г­ГҐГ«ГјГ§Гї Г±ГЄГ®ГЇГЁГ°Г®ГўГ ГІГј, Г­Г® Г¬Г®Г¦Г­Г® ГЇГҐГ°ГҐГ¬ГҐГ±ГІГЁГІГј
 
-        // После вызова detach поток продолжит выполняться независимо от объекта t
+        // ГЏГ®Г±Г«ГҐ ГўГ»Г§Г®ГўГ  detach ГЇГ®ГІГ®ГЄ ГЇГ°Г®Г¤Г®Г«Г¦ГЁГІ ГўГ»ГЇГ®Г«Г­ГїГІГјГ±Гї Г­ГҐГ§Г ГўГЁГ±ГЁГ¬Г® Г®ГІ Г®ГЎГєГҐГЄГІГ  t
         t.detach();
     }
 }
